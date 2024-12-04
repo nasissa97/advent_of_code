@@ -1,0 +1,9 @@
+[package]
+name = "day3"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+thiserror = "2"
+lazy-regex = "3.3.0"
