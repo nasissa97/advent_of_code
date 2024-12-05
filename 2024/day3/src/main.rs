@@ -70,8 +70,7 @@ fn part1(line: String) -> u64 {
     line_value
 }
 
-fn part2(line: String) -> u64 {
-    let mut enabled = true;
+fn part2(line: String, mut enabled: bool) -> (u64, bool) {
     let mut total = 0;
 
     for capture in DAY3_REGEX_PART2.find_iter(&line) {
@@ -84,17 +83,14 @@ fn part2(line: String) -> u64 {
             if enabled {
                 match Instruction::parse_mul(instr) {
                     Some(instruction) => {
-                        println!("mul enable -> {}", instr);
                         total += instruction.output()
                     },
                     _ => println!("Bad Instruction {:?}", instr),
                 };
-            } else {
-                println!("mul disabled -> Skipped: {}", instr);
-            }
+            } 
         }
     }
-    total
+    (total, enabled)
 }
 
 fn main() -> Result<(), Day3Error> {
@@ -102,14 +98,12 @@ fn main() -> Result<(), Day3Error> {
     let file = File::open("data/data2.txt")?;
     let reader = BufReader::new(file);
     let mut ans = 0;
+    let mut enabled = true;
     for line in reader.lines() {
         let value = line?;
-        let enabled= TEST.replace_all(&value, "").to_string();
-        println!("{}", enabled);
-        let total = part1(enabled);
+        let (total, status) = part2(value, enabled);
+        enabled = status;
         ans += total;
-
-        // ans += part1(value);
     }
 
     println!("Answer {}", ans);
