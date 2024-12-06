@@ -83,7 +83,6 @@ fn is_xmas(grid: &Vec<Vec<String>>, checks: Vec<(i32, i32)>, row: usize, col: us
     for (idx, (y, x)) in checks.iter().enumerate() {
         let next_row = (row as i32 + y) as usize;
         let next_col = (col as i32 + x) as usize;
-        println!("Next Row {}\nNext Col {}", next_row, next_col);
         let value = grid.get(next_row).unwrap().get(next_col).unwrap().to_string();
         let want =  path.get(idx).unwrap().to_string();
         if value != want {
@@ -95,10 +94,12 @@ fn is_xmas(grid: &Vec<Vec<String>>, checks: Vec<(i32, i32)>, row: usize, col: us
     is_xmas
 }
 
-fn check_neighbors(grid: &Vec<Vec<String>>, row: i32, col: i32) -> u8 {
+fn check_neighbors(grid: &Vec<Vec<String>>, row: i32, col: i32) -> u64 {
     let mut ans = 0;
     let rows = grid.len();
     let cols = grid.get(0).unwrap().len();
+
+    // Verticals
     if row + 3 < rows as i32 {
         let checks = vec![(1,0), (2,0), (3,0)];
         if is_xmas(grid, checks, row as usize, col as usize) {
@@ -112,6 +113,7 @@ fn check_neighbors(grid: &Vec<Vec<String>>, row: i32, col: i32) -> u8 {
         }
 
     }
+    // Horizantals checks.
     if col + 3 < cols as i32 {
         let checks = vec![(0,1), (0,2), (0,3)];
         if is_xmas(grid, checks, row as usize, col as usize) {
@@ -127,7 +129,8 @@ fn check_neighbors(grid: &Vec<Vec<String>>, row: i32, col: i32) -> u8 {
 
     }
 
-    if col + 3 < cols as i32  && row - 3 < rows as i32 {
+    // Diagonals
+    if col + 3 < cols as i32  && row - 3 >= 0 as i32 {
         let checks = vec![(-1,1), (-2,2), (-3,3)];
         if is_xmas(grid, checks, row as usize, col as usize) {
             ans += 1;
@@ -151,7 +154,7 @@ fn check_neighbors(grid: &Vec<Vec<String>>, row: i32, col: i32) -> u8 {
 
     }
 
-    if col - 3 < 0 && row - 3 >= 0 {
+    if col - 3 >= 0 && row - 3 >= 0 {
         let checks = vec![(-1,-1), (-2,-2), (-3,-3)];
         if is_xmas(grid, checks, row as usize, col as usize) {
             ans += 1;
@@ -164,7 +167,7 @@ fn check_neighbors(grid: &Vec<Vec<String>>, row: i32, col: i32) -> u8 {
 }
 
 fn main() -> anyhow::Result<()> {
-    let file = File::open("data/sample1.txt")?;
+    let file = File::open("data/data.txt")?;
     let reader = BufReader::new(file);
     let mut grid: Vec<Vec<String>> = vec![];
 
@@ -194,7 +197,6 @@ fn main() -> anyhow::Result<()> {
             }
         }
         println!("");
-        break;
     }
 
     println!("Answer: {}", ans);
