@@ -166,6 +166,46 @@ fn check_neighbors(grid: &Vec<Vec<String>>, row: i32, col: i32) -> u64 {
 
 }
 
+fn check_mas(grid: &Vec<Vec<String>>, row: i64, col: i64) -> u64{
+    let mut total = 0;
+    let rows = grid.len();
+    let cols = grid.get(0).unwrap().len();
+    let mut top_to_bottom= false;
+    let mut bottom_to_top = false;
+
+    // Top to bottom: Check range
+    if row - 1 >= 0 && col - 1 >= 0 && row + 1 < rows as i64 && col + 1 < cols as i64 {
+        let top_r_usize: usize = (row-1) as usize;
+        let bottom_r_usize: usize = (row+1) as usize;
+        let left_c_usize: usize = (col-1) as usize;
+        let right_c_usize: usize = (col+1) as usize;
+
+        let top_left_val: &String = grid.get(top_r_usize).unwrap().get(left_c_usize).unwrap();
+        let top_right_val: &String = grid.get(top_r_usize).unwrap().get(right_c_usize).unwrap();
+        let bottom_right_val: &String = grid.get(bottom_r_usize).unwrap().get(right_c_usize).unwrap();
+        let bottom_left_val: &String = grid.get(bottom_r_usize).unwrap().get(left_c_usize).unwrap();
+
+        // Top to bottom
+        if *top_left_val == "M".to_string() && *bottom_right_val == "S".to_string() {
+            top_to_bottom = true
+            
+        } else if *top_left_val == "S".to_string() && *bottom_right_val == "M".to_string() {
+            top_to_bottom = true
+        }
+
+        // Bottom to Top
+        if *top_right_val == "M".to_string() && *bottom_left_val == "S".to_string() {
+            bottom_to_top = true
+        } else if *top_right_val == "S".to_string() && *bottom_left_val == "M".to_string() {
+            bottom_to_top = true
+        }
+    }
+    match top_to_bottom && bottom_to_top {
+        true => 1,
+        false => 0
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let file = File::open("data/data.txt")?;
     let reader = BufReader::new(file);
@@ -189,10 +229,17 @@ fn main() -> anyhow::Result<()> {
     for row in 0..rows {
         for col in 0..cols  {
             let val = grid.get(row).unwrap().get(col).unwrap();
-            if val.to_string() == "X".to_string()  {
-                println!("Row: {} Col: {}", row, col);
-                // let total = bfs(&grid, row, col);
-                let total = check_neighbors(&grid, row as i32, col as i32);
+            // Part 1
+            // if val.to_string() == "X".to_string()  {
+                // println!("Row: {} Col: {}", row, col);
+                // // let total = bfs(&grid, row, col);
+                // let total = check_neighbors(&grid, row as i32, col as i32);
+                // ans += total;
+            // }
+            // Part 2
+            if *val.to_string() == "A".to_string() {
+                println!("Row: {} Col {}", row, col);
+                let total = check_mas(&grid, row as i64, col as i64);
                 ans += total;
             }
         }
