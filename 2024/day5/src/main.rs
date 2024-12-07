@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::collections::{HashMap, hash_map::Entry};
@@ -18,6 +19,33 @@ fn is_valid(updates: &Vec<u64>, task_prereq: &HashMap<u64, Vec<u64>>) -> bool {
         }
    } 
     true
+}
+
+fn fix_order(updates: &mut Vec<u64>, task_prereq: &HashMap<u64, Vec<u64>>)  {
+    println!("Current: {:?}", updates);
+    let n = updates.len();
+    let mut i = 0;
+    while i < n {
+        // let check_task = updates.get(i).unwrap();
+        let mut swapped = false;
+        let task = *updates.get(i).unwrap();
+        for j in i+1..n {
+            let prereq = updates.get(j).unwrap().clone();
+            match task_prereq.contains_key(&task) {
+                true => {
+                    if task_prereq.get(&task).unwrap().contains(&prereq) {
+                        updates.swap(i, j);
+                        swapped = true
+                    }
+                }
+                false => continue
+            }
+        }
+        if !swapped {
+           i += 1; 
+        }
+    }
+    println!("Updated: {:?}", &updates);
 }
 
 fn main() {
@@ -44,7 +72,7 @@ fn main() {
             }
         }
     }
-    println!("Prereq: \n{:?}", task_prereq);
+    // println!("Prereq: \n{:?}", task_prereq);
 
     for line in reader.lines() {
         let line: Vec<u64> = line
@@ -56,14 +84,19 @@ fn main() {
         updates.push(line)
     }
 
-    let mut ans = 0;
-    for update in updates {
+    let mut ans1 = 0;
+    let mut ans2 = 0;
+    for update in &mut updates {
         if is_valid(&update, &task_prereq) {
             let middle = update.len() / 2;
             let middle_val = update.get(middle).unwrap();
-            ans += middle_val;
-
+            ans1 += middle_val;
+        } else {
+            fix_order(update, &task_prereq);
+            let middle = update.len() / 2;
+            let middle_val = update.get(middle).unwrap();
+            ans2 += middle_val;
         }
     }
-    println!("Answer: {}", ans);
+    println!("Part1 Answer: {}\nPart2 Answer: {}", ans1, ans2);
 }
