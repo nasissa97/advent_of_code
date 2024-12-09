@@ -46,10 +46,13 @@ impl <'a, 'b>Add<&'b Position> for &'a Position {
     }
 }
 
+// Not the best idea to expose all the field but then its Advent 🤷
+#[derive(Debug, Clone)]
 struct Guard {
-    position: Position,
-    current_move: Position,
-    seen: HashSet<Position>,
+    pub position: Position,
+    pub current_move: Position,
+    pub seen: HashSet<Position>,
+    pub in_loop: bool,
 }
 
 impl Guard {
@@ -57,10 +60,12 @@ impl Guard {
         let mut seen = HashSet::new();
         seen.insert(position.clone());
         let current_move = Position::new(-1, 0);
+        let in_loop = false;
         Guard {
             position,
             current_move,
             seen,
+            in_loop
         }
     }
 
@@ -69,11 +74,17 @@ impl Guard {
     }
 
     pub fn update_position(&mut self, new_position: Position) {
+        // if self.seen.contains(&new_position) {
+            // println!("Seen Position: {:?}", &new_position);
+        // }
         self.seen.insert(new_position.clone());
         self.position = new_position;
     }
 
     pub fn update_move(&mut self) {
+        if self.in_loop {
+            self.in_loop = false;
+        }
         match self.current_move {
             UP_POSITION =>  self.current_move = RIGHT_POSITION,
             RIGHT_POSITION => self.current_move = DOWN_POSITION,
@@ -81,8 +92,37 @@ impl Guard {
             LEFT_POSITION => self.current_move = UP_POSITION,
             _ => println!("Current Move has invalid state: {:?}", self.current_move), 
         }
-
+        // println!("MOVED");
     }
+
+
+    pub fn cause_loop(&self) -> bool {
+        todo!();
+    }
+
+    pub fn look_over(&mut self) -> bool {
+        if self.in_loop {
+            return false
+        }
+        let direction = match self.current_move {
+            UP_POSITION =>  Some(RIGHT_POSITION),
+            RIGHT_POSITION => Some(DOWN_POSITION),
+            DOWN_POSITION => Some(LEFT_POSITION),
+            LEFT_POSITION => Some(UP_POSITION),
+            _ => None
+        };
+
+        if direction.is_none() {
+            return false
+        }
+
+        let direction = direction.unwrap();
+
+        self.in_loop = true;
+
+        true
+    }
+
 
 }
 
@@ -125,9 +165,40 @@ impl Classroom {
             return true 
         }
         if position.col < 0 || position.col >= self.cols-1 {
-            println!("{:?}", position);
             return true 
         }
+        false
+    }
+
+    pub fn detect_loop(&self, guard: &mut Guard) -> bool {
+        let mut on_path = false;
+        while self.is_valid(&guard.position) {
+            let next_move = &guard.position + &guard.current_move;
+            if !guard.seen.contains(&next_move) {
+                break
+            }
+            guard.update_position(next_move);
+            if guard.seen.contains(&guard.position) {
+                on_path = true;
+            }
+        }
+        let position = &guard.position + &guard.current_move;
+        let row = position.row;
+        let col = position.col;
+        let value  = self.grid.get(row as usize);
+        if value.is_none() {
+            return false
+        }
+        let value = value.unwrap().get(col as usize).clone();
+        if value.is_none() {
+            return false
+        }
+
+        let value = value.unwrap().as_str();
+        if on_path && value == "#" {
+            return true
+        }
+
         false
     }
 
@@ -135,12 +206,16 @@ impl Classroom {
 }
 
 fn part1(grid: Vec<Vec<String>>, rows: i64, cols: i64, position: Position) -> u64 {
-    // let position = Position::new(row.try_into().unwrap(), col.try_into().unwrap());
     let mut guard = Guard::new(position);
     let classroom = Classroom::new(grid, rows as i64, cols as i64);
     let mut count = 0;
     while !classroom.has_exit(&guard.position) {
         let next_move = guard.next_move();
+        let mut guard_clone = guard.clone();
+        guard_clone.update_move();
+        if classroom.detect_loop(&mut guard_clone) {
+            println!("Potential Loop: {:?}", &guard_clone.position);
+        }
         if classroom.is_valid(&next_move) {
             guard.update_position(next_move);
         } else {
@@ -160,7 +235,7 @@ fn part1(grid: Vec<Vec<String>>, rows: i64, cols: i64, position: Position) -> u6
 
 fn main() -> Result<(), Day6Error> {
     println!("Hello, world!");
-    let file = File::open("data/data.txt")?;
+    let file = File::open("data/sample1.txt")?;
     let reader = BufReader::new(file);
     let mut classroom: Vec<Vec<String>> = Vec::new();
     for line in reader.lines() {
