@@ -1,276 +1,250 @@
-use std::ops::Add;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
+use std::hash::{Hash, Hasher};
+use std::time::Instant;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{BufRead, BufReader};
 use thiserror::Error;
+use anyhow::{Result, Context};
 
-#[derive(Error, Debug)]
-enum Day6Error {
-    #[error("IO is tripping")]
-    Io(#[from] io::Error),
-    #[error("Custom error: {0}")]
-    Custom(String),
-}
-
-#[derive(Hash, Eq, Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Position {
-    pub row: i64,
-    pub col: i64,
+    x: i32,
+    y: i32,
 }
 
-const UP_POSITION:Position = Position{row: -1, col: 0};
-const DOWN_POSITION:Position = Position{row: 1, col: 0};
-const LEFT_POSITION:Position = Position{row: 0, col: -1};
-const RIGHT_POSITION:Position = Position{row: 0, col: 1};
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
 
-impl Position {
-    pub fn new(row: i64, col: i64) -> Position {
-        Position {
-            row,
-            col
+impl Direction {
+    fn turn_right(&self) -> Self {
+        match self {
+            Direction::Up => Direction::Right,
+            Direction::Right => Direction::Down,
+            Direction::Down => Direction::Left,
+            Direction::Left => Direction::Up
         }
     }
 
-    pub fn get_position(&self) -> &Position {
-        todo!()
+    fn move_forward(self, pos: &Position) -> Position {
+        match self {
+            Direction::Up => Position { x: pos.x, y: pos.y - 1},
+            Direction::Down => Position { x: pos.x, y: pos.y + 1},
+            Direction::Left => Position { x: pos.x - 1, y: pos.y },
+            Direction::Right => Position { x: pos.x + 1, y: pos.y },
+        }
     }
 }
 
-impl <'a, 'b>Add<&'b Position> for &'a Position {
-    type Output = Position;
-    fn add(self, rhs: &Position) -> Position {
-        Position {
-            row: self.row + rhs.row,
-            col: self.col + rhs.col
-        }
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct State {
+    position: Position,
+    direction: Direction,
+}
+
+impl Hash for State {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.position.hash(state);
+        self.direction.hash(state)
     }
 }
 
-// Not the best idea to expose all the field but then its Advent 🤷
-#[derive(Debug, Clone)]
-struct Guard {
-    pub position: Position,
-    pub current_move: Position,
-    pub seen: HashSet<Position>,
-    pub in_loop: bool,
+#[derive(Debug, Error)]
+enum GridError {
+    #[error("Position ({x}, {y}) is out of bounds")]
+    OutOfBounds { x: i32, y: i32 },
+    #[error("Invalid character '{0}' found in grid")]
+    InvalidCharacter(char),
 }
 
-impl Guard {
-    pub fn new(position: Position) -> Guard {
-        let mut seen = HashSet::new();
-        seen.insert(position.clone());
-        let current_move = Position::new(-1, 0);
-        let in_loop = false;
-        Guard {
-            position,
-            current_move,
-            seen,
-            in_loop
-        }
-    }
-
-    pub fn next_move(&self) -> Position {
-        &self.position + &self.current_move
-    }
-
-    pub fn update_position(&mut self, new_position: Position) {
-        // if self.seen.contains(&new_position) {
-            // println!("Seen Position: {:?}", &new_position);
-        // }
-        self.seen.insert(new_position.clone());
-        self.position = new_position;
-    }
-
-    pub fn update_move(&mut self) {
-        if self.in_loop {
-            self.in_loop = false;
-        }
-        match self.current_move {
-            UP_POSITION =>  self.current_move = RIGHT_POSITION,
-            RIGHT_POSITION => self.current_move = DOWN_POSITION,
-            DOWN_POSITION => self.current_move = LEFT_POSITION,
-            LEFT_POSITION => self.current_move = UP_POSITION,
-            _ => println!("Current Move has invalid state: {:?}", self.current_move), 
-        }
-        // println!("MOVED");
-    }
-
-
-    pub fn cause_loop(&self) -> bool {
-        todo!();
-    }
-
-    pub fn look_over(&mut self) -> bool {
-        if self.in_loop {
-            return false
-        }
-        let direction = match self.current_move {
-            UP_POSITION =>  Some(RIGHT_POSITION),
-            RIGHT_POSITION => Some(DOWN_POSITION),
-            DOWN_POSITION => Some(LEFT_POSITION),
-            LEFT_POSITION => Some(UP_POSITION),
-            _ => None
-        };
-
-        if direction.is_none() {
-            return false
-        }
-
-        let direction = direction.unwrap();
-
-        self.in_loop = true;
-
-        true
-    }
-
-
+#[derive(Clone, Debug)]
+struct Grid {
+    width: usize,
+    height: usize,
+    tiles: Vec<Vec<char>>
 }
 
-
-struct Classroom {
-    pub grid: Vec<Vec<String>>,
-    pub rows: i64,
-    pub cols: i64,
+impl Grid {
+    fn is_open(&self, pos: &Position) -> Result<bool> {
+        if pos.x < 0 || pos.y < 0 || pos.x as usize >= self.width || pos.y as usize >= self.height {
+            return Err(GridError::OutOfBounds { x: pos.x, y: pos.y }.into())
+        }
+        let tile = self.tiles[pos.y as usize][pos.x as usize];
+        if tile != '.' && tile != '#' {
+            return Err(GridError::InvalidCharacter(tile).into());
+        }
+        Ok(tile == '.')
+    }
 }
 
-impl Classroom {
-    pub fn new(grid: Vec<Vec<String>>, rows: i64, cols: i64) -> Classroom {
-        Classroom {
-            grid,
-            rows,
-            cols,
-        }
-    }
+fn simulate_guard_path(grid: &Grid, start: Position, mut direction: Direction) -> Result<HashSet<Position>> {
+    let mut visited = HashSet::new();
+    let mut current_position = start.clone();
 
+    visited.insert(current_position.clone());
 
-    pub fn is_valid(&self, position: &Position) -> bool {
-        if position.row < 0 || position.row >= self.rows {
-            return false
-        }
-        if position.col < 0 || position.col >= self.cols {
-            return false
-        }
+    loop {
+        // Determine the next position based on the current direction
+        let next_position = direction.move_forward(&current_position);
 
-        let row = position.row as usize;
-        let col = position.col as usize;
-        let value = self.grid.get(row).unwrap().get(col).unwrap().as_str();
-        if value == "#" {
-            return false
-        }
-        true
-    }
-
-    pub fn has_exit(&self, position: &Position) -> bool {
-        if position.row < 0 || position.row >= self.rows-1 {
-            return true 
-        }
-        if position.col < 0 || position.col >= self.cols-1 {
-            return true 
-        }
-        false
-    }
-
-    pub fn detect_loop(&self, guard: &mut Guard) -> bool {
-        let mut on_path = false;
-        while self.is_valid(&guard.position) {
-            let next_move = &guard.position + &guard.current_move;
-            if !guard.seen.contains(&next_move) {
-                break
-            }
-            guard.update_position(next_move);
-            if guard.seen.contains(&guard.position) {
-                on_path = true;
-            }
-        }
-        let position = &guard.position + &guard.current_move;
-        let row = position.row;
-        let col = position.col;
-        let value  = self.grid.get(row as usize);
-        if value.is_none() {
-            return false
-        }
-        let value = value.unwrap().get(col as usize).clone();
-        if value.is_none() {
-            return false
-        }
-
-        let value = value.unwrap().as_str();
-        if on_path && value == "#" {
-            return true
-        }
-
-        false
-    }
-
-
-}
-
-fn part1(grid: Vec<Vec<String>>, rows: i64, cols: i64, position: Position) -> u64 {
-    let mut guard = Guard::new(position);
-    let classroom = Classroom::new(grid, rows as i64, cols as i64);
-    let mut count = 0;
-    while !classroom.has_exit(&guard.position) {
-        let next_move = guard.next_move();
-        let mut guard_clone = guard.clone();
-        guard_clone.update_move();
-        if classroom.detect_loop(&mut guard_clone) {
-            println!("Potential Loop: {:?}", &guard_clone.position);
-        }
-        if classroom.is_valid(&next_move) {
-            guard.update_position(next_move);
-        } else {
-            guard.update_move();
-        }
-
-        count += 1;
-        // For testing purpose
-        if count > 10000 {
-            println!("You might of got into a infinite loop :/");
+        // Exit the loop if the guard moves out of bounds
+        if next_position.x < 0 || next_position.y < 0
+            || next_position.x as usize >= grid.width
+            || next_position.y as usize >= grid.height
+        {
             break;
         }
+
+        // Check if the next position is open
+        if grid.is_open(&next_position)? {
+            // Move to the next position and mark it as visited
+            current_position = next_position;
+            visited.insert(current_position.clone());
+        } else {
+            // Turn right if the next position is blocked
+            direction = direction.turn_right();
+        }
     }
 
-    guard.seen.len() as u64
+    Ok(visited)
 }
 
-fn main() -> Result<(), Day6Error> {
-    println!("Hello, world!");
-    let file = File::open("data/sample1.txt")?;
-    let reader = BufReader::new(file);
-    let mut classroom: Vec<Vec<String>> = Vec::new();
-    for line in reader.lines() {
-        let line = line?;
-        let row: Vec<String> = line
-            .split("")
-            .filter(|&s| !s.is_empty())
-            .map(|ch| ch.to_string())
-            .collect();
+fn simulate_guard_path_with_loop_detection(
+    grid: &Grid,
+    start: Position,
+    mut direction: Direction,
+    obstruction: Option<&Position>,
+) -> Result<bool> {
+    let mut visited_states = HashSet::new();
+    let mut current_position = start.clone();
+    loop {
+        // Add the current state to visited set
+        let state = State{position: current_position.clone(), direction: direction.clone()};
+        if visited_states.contains(&state) {
+            return Ok(true)
+        }
+        visited_states.insert(state);
 
-        classroom.push(row);
+        let next_position = direction.move_forward(&current_position);
+
+        if next_position.x < 0 || next_position.y < 0 
+            || next_position.x as usize >= grid.width
+            || next_position.y as usize >= grid.height
+        {
+            return Ok(false)
+        }
+
+        if let Some(obs) = obstruction {
+            if next_position == obs.clone() {
+                direction = direction.turn_right();
+                continue;
+            }
+        }
+
+        if grid.is_open(&next_position)? {
+            current_position = next_position;
+        } else {
+            direction = direction.turn_right();
+        }
     }
+}
 
-    let rows = classroom.len();
-    if rows == 0 {
-        return Err(Day6Error::Custom("No Rows You Must of Read File Wrong".into()))
-    }
-    let cols = classroom.get(0).unwrap().len();
-    let mut starting_position: Option<Position> = None;
+/// Determines valid obstruction positions that would cause the guard to loop.
+fn find_obstruction_positions(grid: &Grid, guard_start: Position, direction: Direction) -> Result<Vec<Position>> {
+    let mut valid_positions = Vec::new();
 
-    for (row, row_values) in classroom.iter().enumerate() {
-        for (col, val) in row_values.iter().enumerate() {
-            if val == "^" {
-                println!("Row: {:?} Col {}", row, col);
-                starting_position = Some(Position::new(row as i64, col as i64));
+    for y in 0..grid.height {
+        for x in 0..grid.width {
+            let candidate = Position { x: x as i32, y: y as i32 };
+
+            // Skip starting position
+            if candidate == guard_start || !grid.is_open(&candidate)? {
+                continue
             }
 
+            // Simulate and check for loop
+            let mut obstructed_grid = grid.clone();
+            obstructed_grid.tiles[candidate.y as usize][candidate.x as usize] = '#';
+
+            let detected_loop= simulate_guard_path_with_loop_detection(
+                &obstructed_grid, 
+                guard_start.clone(), 
+                direction.clone(),
+                Some(&candidate),
+            )?;
+            if detected_loop {
+                valid_positions.push(candidate);
+            }
         }
     }
-    match starting_position {
-        Some(position) => {
-            let anwser = part1(classroom, rows as i64, cols as i64, position);
-            println!("Answer {}", anwser)
-        }
-        None => println!("Couldn't find the guard!"),
+    Ok(valid_positions)
+}
+
+
+fn main() -> Result<()> {
+    println!("Hello, world!");
+    let file = File::open("data/data.txt")?;
+    let reader = BufReader::new(file);
+    let mut tiles: Vec<Vec<char>> = Vec::new();
+    for line in reader.lines() {
+        let line = line?;
+        let row: Vec<char> = line
+            .chars()
+            .collect();
+
+        tiles.push(row);
     }
+
+
+    let mut guard_position: Option<Position> = None;
+    for (row, row_values) in tiles.iter().enumerate() {
+        for (col, val) in row_values.iter().enumerate() {
+            if *val == '^' {
+                println!("Row: {:?} Col {}", row, col);
+                guard_position = Some(Position{x: col as i32, y: row as i32});
+                break
+            }
+        }
+        if guard_position.is_some() {
+           break;
+        }
+    }
+
+    
+
+    let guard_start = match guard_position {
+        Some(pos) => pos,
+        None => return Ok(()),
+    };
+
+    let guard_direction = Direction::Up;
+
+    tiles[guard_start.y as usize][guard_start.x as usize] = '.';
+
+    let grid = Grid {
+        width: tiles[0].len(),
+        height: tiles.len(),
+        tiles,
+    };
+
+
+    let visited_positions = simulate_guard_path(&grid, guard_start.clone(), guard_direction.clone())
+        .context("Failed to simulate guard path for Part1")?;
+    println!("Part 1: Distinct positions visited: {}", visited_positions.len());
+
+    // Part 2: Find valid obstruction positions
+    let now = Instant::now();
+    let valid_positions = find_obstruction_positions(&grid, guard_start.clone(), guard_direction.clone())
+        .context("Failed to find valid obstruction positions for Part 2")?;
+    // println!("Part 2: Valid obstructions positions: {:?}", valid_positions);
+    let elapsed = now.elapsed();
+    // Synchronous => 96.74s
+    // Asynchronus => 
+    println!("Elapsed: {:.2?}", elapsed);
+    println!("Part 2: Number of valid positions: {}", valid_positions.len());
     Ok(())
 }
