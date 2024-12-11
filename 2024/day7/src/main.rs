@@ -9,10 +9,25 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 enum CalibrationError {
-    #[error("string is in correct format to create caliberation")]
+    #[error("Invalid format caliberation string")]
     InvalidString,
 }
 
+pub struct CalibrationParser;
+
+impl CalibrationParser {
+    pub fn parse(value: &str) -> Result<Vec<u64>, CalibrationError> {
+        let nums: Vec<u64> = value
+            .split(&[':', ' '][..])
+            .filter_map(|v| v.parse::<u64>().ok())
+            .collect();
+
+        if nums.is_empty() {
+            return Err(CalibrationError::InvalidString)
+        }
+        Ok(nums)
+    }   
+}
 
 #[derive(Debug, Clone)]
 struct Calibration {
@@ -22,87 +37,97 @@ struct Calibration {
 }
 
 impl Calibration {
-    pub fn new(value: String) -> Result<Self, CalibrationError> {
-        if !value.contains(":") {
-            return Err(CalibrationError::InvalidString)
-        }
+    pub fn new(value: &str) -> Result<Self, CalibrationError> {
+        let nums = CalibrationParser::parse(value)?;
+        let (result, equation) = nums.split_first() 
+            .ok_or(CalibrationError::InvalidString)?;
 
-        let nums: Vec<u64> = value
-            .split(&[':', ' '][..]) 
-            .filter_map(|v| v.parse::<u64>().ok())
-            .collect();
-
-        if nums.len() == 0 {
-            return Err(CalibrationError::InvalidString)
-        }
-        if let Some((result, equation)) = nums.split_first() {
-            Ok(Self {
-                solution: result.clone(),
-                equation: equation.to_vec(),
-            })
-        } else {
-            Err(CalibrationError::InvalidString)
-        }
+        Ok(Self {
+            solution: result.clone(),
+            equation: equation.to_vec(),
+        })
     }
 
-    pub fn is_valid_part1(&self) -> bool {
-        let starting_value = self.equation[0];
-        return self.calc_part1(1, starting_value)
+    pub fn is_valid(&self, strategy: &dyn ValidationStrategy) -> bool {
+        strategy.validate(self)
     }
+}
 
-    pub fn is_valid_part2(&self) -> bool {
-        let starting_value = self.equation[0];
-        return self.calc_part2(1, starting_value)
+pub trait ValidationStrategy {
+    fn validate(&self, calibration: &Calibration) -> bool;
+}
+
+pub struct Part1Validation; 
+
+impl ValidationStrategy for Part1Validation {
+    fn validate(&self, calibration: &Calibration) -> bool {
+        Self::calculate(1, calibration.equation[0], calibration)
     }
-    fn calc_part1(&self, idx: usize, acc: u64) -> bool {
-        if self.equation.len() == idx && acc == self.solution {
+}
+
+impl Part1Validation {
+    fn calculate(idx: usize, acc: u64, calibration: &Calibration) -> bool {
+        if idx == calibration.equation.len() && acc == calibration.solution {
             return true
         }
 
-        if idx >= self.equation.len() {
+        if idx >= calibration.equation.len() {
             return false
         }
 
-        let next_value = if let Some(value) = self.equation.get(idx) {
-            value.clone()
-        } else {
-            return false;
-        };
+        let next_value = calibration.equation[idx];
 
-        if acc * next_value <= self.solution && self.calc_part1(idx.add(1), acc * next_value){
+        if acc * next_value <= calibration.solution 
+            && Self::calculate(idx + 1, acc * next_value, calibration)
+        {
             return true
         }
 
-        if acc + next_value <= self.solution && self.calc_part1(idx.add(1), acc + next_value){
+        if acc + next_value <= calibration.solution 
+            && Self::calculate(idx + 1, acc + next_value, calibration)
+        {
             return true
         }
         false
     }
+}
 
-    fn calc_part2(&self, idx: usize, acc: u64) -> bool {
-        if idx >= self.equation.len() && acc == self.solution {
+pub struct Part2Validation;
+
+impl ValidationStrategy for Part2Validation {
+    fn validate(&self, calibration: &Calibration) -> bool {
+        Self::calculate(1, calibration.equation[0], calibration)
+    }
+}
+
+impl Part2Validation {
+    fn calculate(idx: usize, acc: u64, calibration: &Calibration) -> bool {
+        if idx == calibration.equation.len() && acc == calibration.solution {
             return true
         }
 
-        if idx >= self.equation.len() {
+        if idx >= calibration.equation.len() {
             return false
         }
 
-        let next_value = if let Some(value) = self.equation.get(idx) {
-            value.clone()
-        } else {
-            return false;
-        };
+        let next_value = calibration.equation[idx];
 
-        if acc * next_value <= self.solution && self.calc_part2(idx.add(1), acc * next_value){
+        if acc * next_value <= calibration.solution 
+            && Self::calculate(idx + 1, acc * next_value, calibration)
+        {
             return true
         }
 
-        if acc + next_value <= self.solution && self.calc_part2(idx.add(1), acc + next_value){
+        if acc + next_value <= calibration.solution 
+            && Self::calculate(idx + 1, acc + next_value, calibration)
+        {
             return true
         }
+
         let  new_value = concat_nums(acc, next_value);
-        if new_value <= self.solution && self.calc_part2(idx.add(1), new_value){
+        if new_value <= calibration.solution 
+            && Self::calculate(idx.add(1), new_value, calibration)
+        {
             return true
         }
         false
@@ -110,69 +135,40 @@ impl Calibration {
 
 }
 
-impl TryFrom<String> for Calibration {
-    type Error = CalibrationError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match Calibration::new(value) {
-            Ok(calibration) => Ok(calibration),
-            Err(_) => Err(CalibrationError::InvalidString)
-        }
-    }
-}
 
 pub fn concat_nums(num1: u64, num2: u64) -> u64 {
-    let num1_as_str = num1.to_string();
-    let nums1: Vec<&str> = num1_as_str.split("").collect();
-
-    let num2_as_str = num2.to_string();
-    let nums2: Vec<&str> = num2_as_str.split("").collect();
-
-    let mut nums: Vec<&str> = Vec::new();
-    for num in nums1 {
-        nums.push(num);
-    }
-    for num in nums2 {
-        nums.push(num);
-    }
-
-    nums.join("").parse::<u64>().unwrap()
+    format!("{}{}", num1, num2).parse::<u64>().unwrap()
 }
 
 fn main() -> Result<()> {
     println!("Hello, world!");
     let file = File::open("data/data.txt")?;
     let reader = BufReader::new(file);
-    let mut calibrations: Vec<Calibration> = vec![];
-    for line in reader.lines() {
-        let line = line?;
-        let calibration: Calibration = line.try_into()?;
-        calibrations.push(calibration);
-    }
+    let calibrations: Vec<Calibration> = reader.lines()
+        .filter_map(|line| line.ok())
+        .filter_map(|line| Calibration::new(&line).ok())
+        .collect();
 
-    // println!("{:?}", calibrations);
 
-    let start = Instant::now();
-    let mut answer_part1 = 0;
-    for calibration in &calibrations {
-        if calibration.is_valid_part1() {
-            answer_part1 += calibration.solution;
-        }
-    }
-    let duration = start.elapsed();
-    println!("Answer for Part 1: {}", answer_part1);
-    println!("Time for Part 1: {:.2?}", duration);
-
-    let start = Instant::now();
-    let mut answer_part2 = 0;
-    for calibration in &calibrations {
-        if calibration.is_valid_part2() {
-            answer_part2 += calibration.solution
-        }
-    }
-    let duration = start.elapsed();
-    println!("Answer for Part 2: {}", answer_part2);
-    println!("Time for Part 2: {:.2?}", duration);
-
+        let start = Instant::now();
+        let answer_part1 = calculate_solution(&calibrations, &Part1Validation);
+        println!("Answer for Part 1: {}", answer_part1);
+        println!("Time for Part 1: {:.2?}", start.elapsed());
+    
+        let start = Instant::now();
+        let answer_part2 = calculate_solution(&calibrations, &Part2Validation);
+        println!("Answer for Part 2: {}", answer_part2);
+        println!("Time for Part 2: {:.2?}", start.elapsed());
     Ok(())
+}
+
+fn calculate_solution(
+    calibrations: &[Calibration],
+    strategy: &dyn ValidationStrategy,
+) -> u64 {
+    calibrations
+        .iter()
+        .filter(|calibration| calibration.is_valid(strategy))
+        .map(|calibration| calibration.solution)
+        .sum()
 }
