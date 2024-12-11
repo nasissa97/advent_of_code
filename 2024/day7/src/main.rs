@@ -5,6 +5,7 @@ use std::ops::Add;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
+use rayon::prelude::*;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -53,7 +54,7 @@ impl Calibration {
     }
 }
 
-pub trait ValidationStrategy {
+pub trait ValidationStrategy: Send + Sync {
     fn validate(&self, calibration: &Calibration) -> bool;
 }
 
@@ -140,6 +141,10 @@ pub fn concat_nums(num1: u64, num2: u64) -> u64 {
     format!("{}{}", num1, num2).parse::<u64>().unwrap()
 }
 
+// Part 1 No Parallelism => 3.89ms
+// Part 1 With Parallelism => 904.75us
+// Part 2 No Parallelism => 319.06ms
+// Part 2 With Parallelism => 52.60ms
 fn main() -> Result<()> {
     println!("Hello, world!");
     let file = File::open("data/data.txt")?;
@@ -167,7 +172,7 @@ fn calculate_solution(
     strategy: &dyn ValidationStrategy,
 ) -> u64 {
     calibrations
-        .iter()
+        .par_iter()
         .filter(|calibration| calibration.is_valid(strategy))
         .map(|calibration| calibration.solution)
         .sum()
