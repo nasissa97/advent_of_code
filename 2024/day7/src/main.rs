@@ -1,6 +1,8 @@
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::ops::Add;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use thiserror::Error;
@@ -41,7 +43,35 @@ impl Calibration {
         } else {
             Err(CalibrationError::InvalidString)
         }
+    }
 
+    pub fn is_valid(&self) -> bool {
+        let starting_value = self.equation[0];
+        return self.calc(1, starting_value)
+    }
+    fn calc(&self, idx: usize, acc: u64) -> bool {
+        if self.equation.len() == idx && acc == self.solution {
+            return true
+        }
+
+        if idx >= self.equation.len() {
+            return false
+        }
+
+        let next_value = if let Some(value) = self.equation.get(idx) {
+            value.clone()
+        } else {
+            return false;
+        };
+
+        if acc * next_value <= self.solution && self.calc(idx.add(1), acc * next_value){
+            return true
+        }
+
+        if acc + next_value <= self.solution && self.calc(idx.add(1), acc + next_value){
+            return true
+        }
+        false
     }
 
 }
@@ -59,7 +89,7 @@ impl TryFrom<String> for Calibration {
 
 fn main() -> Result<()> {
     println!("Hello, world!");
-    let file = File::open("data/sample.txt")?;
+    let file = File::open("data/data.txt")?;
     let reader = BufReader::new(file);
     let mut calibrations: Vec<Calibration> = vec![];
     for line in reader.lines() {
@@ -68,7 +98,18 @@ fn main() -> Result<()> {
         calibrations.push(calibration);
     }
 
-    println!("{:?}", calibrations);
+    // println!("{:?}", calibrations);
+
+    let start = Instant::now();
+    let mut answer_part1 = 0;
+    for calibration in calibrations {
+        if calibration.is_valid() {
+            answer_part1 += calibration.solution;
+        }
+    }
+    let duration = start.elapsed();
+    println!("Answer for Part 1: {}", answer_part1);
+    println!("Time for Part 1: {:.2?}", duration);
 
     Ok(())
 }
