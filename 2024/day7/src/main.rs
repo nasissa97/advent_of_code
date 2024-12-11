@@ -45,11 +45,16 @@ impl Calibration {
         }
     }
 
-    pub fn is_valid(&self) -> bool {
+    pub fn is_valid_part1(&self) -> bool {
         let starting_value = self.equation[0];
-        return self.calc(1, starting_value)
+        return self.calc_part1(1, starting_value)
     }
-    fn calc(&self, idx: usize, acc: u64) -> bool {
+
+    pub fn is_valid_part2(&self) -> bool {
+        let starting_value = self.equation[0];
+        return self.calc_part2(1, starting_value)
+    }
+    fn calc_part1(&self, idx: usize, acc: u64) -> bool {
         if self.equation.len() == idx && acc == self.solution {
             return true
         }
@@ -64,11 +69,40 @@ impl Calibration {
             return false;
         };
 
-        if acc * next_value <= self.solution && self.calc(idx.add(1), acc * next_value){
+        if acc * next_value <= self.solution && self.calc_part1(idx.add(1), acc * next_value){
             return true
         }
 
-        if acc + next_value <= self.solution && self.calc(idx.add(1), acc + next_value){
+        if acc + next_value <= self.solution && self.calc_part1(idx.add(1), acc + next_value){
+            return true
+        }
+        false
+    }
+
+    fn calc_part2(&self, idx: usize, acc: u64) -> bool {
+        if idx >= self.equation.len() && acc == self.solution {
+            return true
+        }
+
+        if idx >= self.equation.len() {
+            return false
+        }
+
+        let next_value = if let Some(value) = self.equation.get(idx) {
+            value.clone()
+        } else {
+            return false;
+        };
+
+        if acc * next_value <= self.solution && self.calc_part2(idx.add(1), acc * next_value){
+            return true
+        }
+
+        if acc + next_value <= self.solution && self.calc_part2(idx.add(1), acc + next_value){
+            return true
+        }
+        let  new_value = concat_nums(acc, next_value);
+        if new_value <= self.solution && self.calc_part2(idx.add(1), new_value){
             return true
         }
         false
@@ -87,6 +121,24 @@ impl TryFrom<String> for Calibration {
     }
 }
 
+pub fn concat_nums(num1: u64, num2: u64) -> u64 {
+    let num1_as_str = num1.to_string();
+    let nums1: Vec<&str> = num1_as_str.split("").collect();
+
+    let num2_as_str = num2.to_string();
+    let nums2: Vec<&str> = num2_as_str.split("").collect();
+
+    let mut nums: Vec<&str> = Vec::new();
+    for num in nums1 {
+        nums.push(num);
+    }
+    for num in nums2 {
+        nums.push(num);
+    }
+
+    nums.join("").parse::<u64>().unwrap()
+}
+
 fn main() -> Result<()> {
     println!("Hello, world!");
     let file = File::open("data/data.txt")?;
@@ -102,14 +154,25 @@ fn main() -> Result<()> {
 
     let start = Instant::now();
     let mut answer_part1 = 0;
-    for calibration in calibrations {
-        if calibration.is_valid() {
+    for calibration in &calibrations {
+        if calibration.is_valid_part1() {
             answer_part1 += calibration.solution;
         }
     }
     let duration = start.elapsed();
     println!("Answer for Part 1: {}", answer_part1);
     println!("Time for Part 1: {:.2?}", duration);
+
+    let start = Instant::now();
+    let mut answer_part2 = 0;
+    for calibration in &calibrations {
+        if calibration.is_valid_part2() {
+            answer_part2 += calibration.solution
+        }
+    }
+    let duration = start.elapsed();
+    println!("Answer for Part 2: {}", answer_part2);
+    println!("Time for Part 2: {:.2?}", duration);
 
     Ok(())
 }
