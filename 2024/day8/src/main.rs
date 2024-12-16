@@ -38,15 +38,17 @@ impl Grid {
         })
     }
 
-    pub fn is_valid(&self, position: &Position, antena: &char) -> bool {
-        if !self.in_bound(&position) {
+    pub fn is_valid_part1(&self, position: &Position, antena: &char) -> bool {
+        if !self.in_bound(&position) || !self.is_antena(&position, antena) {
             return false
         }
+        true
+    }
 
-        if !self.is_antena(&position, antena) {
+    pub fn is_valid_part2(&self, position: &Position) -> bool {
+        if !self.in_bound(&position) { 
             return false
         }
-
         true
     }
 
@@ -77,6 +79,32 @@ fn generate_anti_node(p1: &Position, p2: &Position) -> (Position, Position) {
     return (new_position1, new_position2)
 }
 
+fn generate_anti_node_part2(p1: &Position, p2: &Position, max_rows: i32, max_cols: i32) -> Vec<Position> {
+    let height =  p2.row - p1.row;
+    let length = p2.col - p1.col;
+    let mut positions: Vec<Position> = vec![p1.clone(), p2.clone()];
+
+    let mut curr_row = p1.row - height;
+    let mut curr_col= p1.col - length;
+    while curr_row >= 0 && curr_col >= 0  {
+        let new_position = Position{ row: curr_row, col: curr_col };
+        positions.push(new_position);
+        curr_row -= height;
+        curr_col -= length;
+    }
+
+    let mut curr_row = p2.row + height;
+    let mut curr_col= p2.col + length;
+    while  curr_row < max_rows && curr_col < max_cols {
+        let new_position = Position{ row: curr_row, col: curr_col };
+        positions.push(new_position);
+        curr_row += height;
+        curr_col += length;
+    }
+
+    positions
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Position {
     row: i32,
@@ -103,16 +131,15 @@ fn find_same_frequency(city: &Grid) -> HashMap<char, Vec<Position>> {
 }
 
 fn part1(city: &Grid, antena_map: &HashMap<char, Vec<Position>>) -> usize {
-
     let mut seen: HashSet<Position> = HashSet::new();
     for (antena, positions) in antena_map {
         for i in 0..positions.len() {
             for j in i..positions.len() {
                 let (new_position1, new_position2) = generate_anti_node(&positions[i], &positions[j]) ;
-                if city.is_valid(&new_position1, antena) && !seen.contains(&new_position1) {
+                if city.is_valid_part1(&new_position1, antena) && !seen.contains(&new_position1) {
                     seen.insert(new_position1);
                 }
-                if city.is_valid(&new_position2, antena) && !seen.contains(&new_position2) {
+                if city.is_valid_part1(&new_position2, antena) && !seen.contains(&new_position2) {
                     seen.insert(new_position2);
                 }
             }
@@ -122,6 +149,26 @@ fn part1(city: &Grid, antena_map: &HashMap<char, Vec<Position>>) -> usize {
 
     return seen.len()
 }
+
+fn part2(city: &Grid, antena_map: &HashMap<char, Vec<Position>>) -> usize {
+    let mut seen: HashSet<Position> = HashSet::new();
+    for (_, positions) in antena_map {
+        for i in 0..positions.len() {
+            for j in i+1..positions.len() {
+                let new_positions = generate_anti_node_part2(&positions[i], &positions[j], city.rows as i32, city.cols as i32);
+                for new_position in new_positions {
+                    if city.is_valid_part2(&new_position) && !seen.contains(&new_position) {
+                        seen.insert(new_position);
+                    }
+                }
+            }
+        }
+
+    }
+
+    return seen.len()
+}
+
 
 fn main() -> Result<()> {
     println!("Hello, world!");
@@ -133,14 +180,17 @@ fn main() -> Result<()> {
         .collect();
 
     let city= Grid::new(reader)?;
-    // println!("{:?}", city);
-    // println!("\n------------------------------------------\n");
     let freq_map = find_same_frequency(&city);
-    // println!("{:?}", freq_map);
+
     let part1_start_time = Instant::now();
     let part1_solution = part1(&city, &freq_map);
-    let part2_end_time = part1_start_time.elapsed();
-    println!("Part 1: Solution: {}\t Time: {:?}", part1_solution, part2_end_time);
+    let part1_end_time = part1_start_time.elapsed();
+    println!("Part 1: Solution: {}\t Time: {:?}", part1_solution, part1_end_time); // 361.083 microsenconds
+
+    let part2_start_time = Instant::now();
+    let part2_solution = part2(&city, &freq_map);
+    let part2_end_time = part2_start_time.elapsed();
+    println!("Part 2: Solution: {}\t Time: {:?}", part2_solution, part2_end_time); // 2.110 millienconds
 
     Ok(())
 }
